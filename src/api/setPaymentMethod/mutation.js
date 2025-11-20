@@ -12,7 +12,6 @@ mutation setPaymentMethodMutation(
       payment_method: {
         code: "stripe_payments"
         stripe_payments: {
-          payment_element: true
           payment_method: $paymentMethodId
           save_payment_method: true
         }
