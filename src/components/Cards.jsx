@@ -1,53 +1,42 @@
-import React from 'react';
-import { func, shape } from 'prop-types';
+import React, { useMemo } from 'react';
 
 import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
-import RadioInput from '../../../../components/common/Form/RadioInput';
 import Form from './Cards/Form';
 import { paymentMethodShape } from '../utility';
 import config from './config';
-import useStripeCartContext from '../hooks/useStripeCartContext';
 
 const stripePromise = loadStripe(config.apiKey, { locale: config.locale });
 
-function Cards({ method, selected, actions }) {
+function Cards({ method, selected }) {
   const isSelected = method.code === selected.code;
-  const { cartAmount } = useStripeCartContext();
 
-  const radioInputTag = (
-    <RadioInput
-      value={method.code}
-      label={method.title}
-      name="paymentMethod"
-      checked={isSelected}
-      onChange={actions.change}
-    />
-  );
-
-  if (isSelected) {
-    // does not matter what currency used here, it will be overwritten eventually by the backend
-    const options = {
+  const options = useMemo(
+    () => ({
       mode: 'payment',
-      amount: Math.floor(cartAmount * 100),
+      amount: 1000,
       currency: 'eur',
       paymentMethodCreation: 'manual',
-    };
-    const elementsTag = (
+    }),
+    []
+  );
+
+  return (
+    <div
+      style={{
+        display: isSelected ? 'block' : 'none',
+      }}
+    >
       <Elements stripe={stripePromise} options={options}>
         <Form />
       </Elements>
-    );
-
-    return [radioInputTag, elementsTag];
-  }
-  return radioInputTag;
+    </div>
+  );
 }
 
 Cards.propTypes = {
   method: paymentMethodShape.isRequired,
   selected: paymentMethodShape.isRequired,
-  actions: shape({ change: func }).isRequired,
 };
 
 export default Cards;

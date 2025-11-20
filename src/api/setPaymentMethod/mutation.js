@@ -1,4 +1,4 @@
-import { CART_DATA_FRAGMENT } from '../../../../../api/cart/utility/query/cartQueryInfo';
+import { CART_DATA_FRAGMENT } from '@hyva/react-checkout/api/cart/utility/query/cartQueryInfo';
 
 // @TODO pass checkout agreements
 export const SET_PAYMENT_METHOD_MUTATION = `
@@ -12,7 +12,6 @@ mutation setPaymentMethodMutation(
       payment_method: {
         code: "stripe_payments"
         stripe_payments: {
-          payment_element: true
           payment_method: $paymentMethodId
           save_payment_method: true
         }

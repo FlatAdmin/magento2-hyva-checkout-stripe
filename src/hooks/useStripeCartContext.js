@@ -1,5 +1,5 @@
 import _get from 'lodash.get';
-import useCartContext from '../../../../hook/useCartContext';
+import useCartContext from '@hyva/react-checkout/hook/useCartContext';
 
 export default function useStripeCartContext() {
   const { cart, setOrderInfo } = useCartContext();

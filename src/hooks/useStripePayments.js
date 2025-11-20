@@ -1,5 +1,5 @@
-import { useCallback } from 'react';
-import { __ } from '../../../../i18n';
+import { useCallback, useEffect, useRef } from 'react';
+import { __ } from '@hyva/react-checkout/i18n';
 import _get from 'lodash.get';
 import { useElements, useStripe } from '@stripe/react-stripe-js';
 import useStripeCartContext from './useStripeCartContext';
@@ -10,23 +10,39 @@ export default function useStripePayments() {
   const { customerEmail, customerFullName, setOrderInfo } =
     useStripeCartContext();
 
-  const { setErrorMessage, appDispatch, setPageLoader } = useStripeAppContext();
+  const { setErrorMessage, appDispatch } = useStripeAppContext();
 
   const stripe = useStripe();
   const elements = useElements();
 
+  // Use refs to capture current values without making them dependencies
+  // This prevents the placeOrder callback from being recreated when stripe/elements change
+  const stripeRef = useRef(stripe);
+  const elementsRef = useRef(elements);
+
+  useEffect(() => {
+    stripeRef.current = stripe;
+    elementsRef.current = elements;
+  }, [elements, stripe]);
+
   const placeOrder = useCallback(async () => {
     try {
-      setPageLoader(true);
+      const currentStripe = stripeRef.current;
+      const currentElements = elementsRef.current;
 
-      const { error: submitError } = await elements.submit();
-      if (submitError) {
-        setErrorMessage(submitError);
+      if (!currentStripe || !currentElements) {
+        setErrorMessage(__('Payment method not ready. Please try again.'));
         return false;
       }
 
-      const paymentMethodResult = await stripe.createPaymentMethod({
-        elements,
+      const { error: submitError } = await currentElements.submit();
+      if (submitError) {
+        setErrorMessage(submitError.message);
+        return false;
+      }
+
+      const paymentMethodResult = await currentStripe.createPaymentMethod({
+        elements: currentElements,
         params: {
           billing_details: {
             name: customerFullName,
@@ -37,36 +53,48 @@ export default function useStripePayments() {
 
       if (paymentMethodResult.error) {
         setErrorMessage(paymentMethodResult.error.message);
+        return false;
       }
+
       const pmId = _get(paymentMethodResult, 'paymentMethod.id', false);
 
       if (pmId === false) {
+        setErrorMessage(
+          __('Failed to create payment method. Please try again.')
+        );
         return false;
       }
 
       await setPaymentMethodRequest(appDispatch, pmId);
       const order = await placeOrderRequest(appDispatch);
 
-      const { paymentIntent } = await stripe.retrievePaymentIntent(
-        order.client_secret
-      );
-      if (paymentIntent.next_action) {
-        const nextActionResult = await stripe.handleNextAction({
-          clientSecret: order.client_secret,
-        });
-        if (nextActionResult.error) {
-          console.error(nextActionResult.error);
-          setErrorMessage(
-            __(
-              'This transaction could not be finalized. Please select another payment method.'
-            )
-          );
+      if (!order) {
+        setErrorMessage(__('Failed to create order. Please try again.'));
+        return false;
+      }
+
+      // If there's a client_secret, handle payment intent confirmation
+      if (order.client_secret) {
+        const { paymentIntent } = await currentStripe.retrievePaymentIntent(
+          order.client_secret
+        );
+        if (paymentIntent.next_action) {
+          const nextActionResult = await currentStripe.handleNextAction({
+            clientSecret: order.client_secret,
+          });
+          if (nextActionResult.error) {
+            console.error(nextActionResult.error);
+            setErrorMessage(
+              __(
+                'This transaction could not be finalized. Please select another payment method.'
+              )
+            );
+            return false;
+          }
         }
       }
 
-      if (order) {
-        setOrderInfo(order);
-      }
+      setOrderInfo(order);
       return order;
     } catch (e) {
       console.error(e);
@@ -75,14 +103,10 @@ export default function useStripePayments() {
           'This transaction could not be performed. Please select another payment method.'
         )
       );
-    } finally {
-      setPageLoader(false);
     }
+
     return false;
   }, [
-    setPageLoader,
-    elements,
-    stripe,
     customerFullName,
     customerEmail,
     appDispatch,
