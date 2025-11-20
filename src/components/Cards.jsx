@@ -5,20 +5,22 @@ import { loadStripe } from '@stripe/stripe-js';
 import Form from './Cards/Form';
 import { paymentMethodShape } from '../utility';
 import config from './config';
+import useStripeCartContext from '../hooks/useStripeCartContext';
 
 const stripePromise = loadStripe(config.apiKey, { locale: config.locale });
 
 function Cards({ method, selected }) {
   const isSelected = method.code === selected.code;
+  const { cartAmount } = useStripeCartContext();
 
   const options = useMemo(
     () => ({
       mode: 'payment',
-      amount: 1000,
+      amount: Math.floor(cartAmount * 100),
       currency: 'eur',
       paymentMethodCreation: 'manual',
     }),
-    []
+    [cartAmount]
   );
 
   return (
