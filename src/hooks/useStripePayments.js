@@ -98,11 +98,30 @@ export default function useStripePayments() {
       return order;
     } catch (e) {
       console.error(e);
-      setErrorMessage(
-        __(
-          'This transaction could not be performed. Please select another payment method.'
-        )
-      );
+      const errorMessage = e?.message || '';
+
+      // Check if this is a backend/onboarding error
+      const isBackendError =
+        errorMessage &&
+        (errorMessage.includes('Unable to complete your order') ||
+          errorMessage.includes('contact support'));
+
+      if (isBackendError) {
+        setErrorMessage(
+          __(
+            'We could not complete your order at this time. Please try again later or contact our support team.'
+          )
+        );
+        setTimeout(() => {
+          window.location.href = '/signup';
+        }, 3000);
+      } else {
+        setErrorMessage(
+          __(
+            'This transaction could not be performed. Please select another payment method.'
+          )
+        );
+      }
     }
 
     return false;
