@@ -4,10 +4,12 @@ import { PaymentElement } from '@stripe/react-stripe-js';
 
 import useStripeCheckoutFormContext from '../../hooks/useStripeCheckoutFormContext';
 import useStripePayments from '../../hooks/useStripePayments';
+import ErrorModal from './ErrorModal';
 
 function Form() {
   const { registerPaymentAction } = useStripeCheckoutFormContext();
-  const { placeOrder } = useStripePayments();
+  const { placeOrder, onboardingError, handleErrorConfirm } =
+    useStripePayments();
 
   const paymentSubmitHandler = useCallback(
     async () => placeOrder(),
@@ -18,7 +20,16 @@ function Form() {
     registerPaymentAction('stripe_payments', paymentSubmitHandler);
   }, [registerPaymentAction, paymentSubmitHandler]);
 
-  return <PaymentElement />;
+  return (
+    <>
+      <PaymentElement />
+      <ErrorModal
+        isOpen={!!onboardingError}
+        errorMessage={onboardingError}
+        onConfirm={handleErrorConfirm}
+      />
+    </>
+  );
 }
 
 export default Form;
