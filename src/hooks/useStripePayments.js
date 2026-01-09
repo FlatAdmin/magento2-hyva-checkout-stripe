@@ -28,6 +28,69 @@ export default function useStripePayments() {
     elementsRef.current = elements;
   }, [elements, stripe]);
 
+  /**
+   * Handle Stripe client_secret confirmation for both PaymentIntent and SetupIntent.
+   * For subscriptions, the backend may return a SetupIntent (seti_) or PaymentIntent (pi_)
+   * client secret depending on whether payment is collected immediately or later.
+   */
+  const handleStripeConfirmation = useCallback(
+    async (currentStripe, clientSecret) => {
+      if (!clientSecret) {
+        return { success: true };
+      }
+
+      // Determine if this is a SetupIntent or PaymentIntent based on the client_secret prefix
+      const isSetupIntent = clientSecret.startsWith('seti_');
+
+      if (isSetupIntent) {
+        // Handle SetupIntent confirmation (used for trial subscriptions or future payments)
+        const { setupIntent, error } = await currentStripe.retrieveSetupIntent(
+          clientSecret
+        );
+
+        if (error) {
+          return { success: false, error: error.message };
+        }
+
+        if (
+          setupIntent.status === 'requires_action' ||
+          setupIntent.next_action
+        ) {
+          const result = await currentStripe.confirmSetup({
+            clientSecret,
+            redirect: 'if_required',
+          });
+
+          if (result.error) {
+            return { success: false, error: result.error.message };
+          }
+        }
+
+        return { success: true };
+      }
+      // Handle PaymentIntent confirmation (used for immediate payments including subscriptions)
+      const { paymentIntent, error } =
+        await currentStripe.retrievePaymentIntent(clientSecret);
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      if (paymentIntent.next_action) {
+        const result = await currentStripe.handleNextAction({
+          clientSecret,
+        });
+
+        if (result.error) {
+          return { success: false, error: result.error.message };
+        }
+      }
+
+      return { success: true };
+    },
+    []
+  );
+
   const placeOrder = useCallback(async () => {
     try {
       const currentStripe = stripeRef.current;
@@ -76,24 +139,22 @@ export default function useStripePayments() {
         return false;
       }
 
-      // If there's a client_secret, handle payment intent confirmation
+      // If there's a client_secret, handle payment/setup intent confirmation
+      // This handles both one-time payments and subscription payments
       if (order.client_secret) {
-        const { paymentIntent } = await currentStripe.retrievePaymentIntent(
+        const confirmResult = await handleStripeConfirmation(
+          currentStripe,
           order.client_secret
         );
-        if (paymentIntent.next_action) {
-          const nextActionResult = await currentStripe.handleNextAction({
-            clientSecret: order.client_secret,
-          });
-          if (nextActionResult.error) {
-            console.error(nextActionResult.error);
-            setErrorMessage(
+
+        if (!confirmResult.success) {
+          setErrorMessage(
+            confirmResult.error ||
               __(
                 'This transaction could not be finalized. Please select another payment method.'
               )
-            );
-            return false;
-          }
+          );
+          return false;
         }
       }
 
@@ -133,6 +194,7 @@ export default function useStripePayments() {
     setMessage,
     setErrorMessage,
     setOrderInfo,
+    handleStripeConfirmation,
   ]);
 
   // Handler for the error modal
